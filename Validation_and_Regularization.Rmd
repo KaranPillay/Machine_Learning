@@ -1,0 +1,331 @@
+
+## Problem 1
+
+### 1. (10 points) Create a KNN classifier model to predict the pdc-80-flag using the following continuous features “total-los”,“num-op”,“num-er”,“num- ndc”,“pre-total-cost”, and “pre-CCI”. Use 10-fold cross validation to de- termine which value of K produces the most accurate result from the range k = 31 to 101 with a step size of 2.
+
+```{r}
+library(caret)
+library(clusterSim)
+library(class)
+library(flexclust)
+library(matlib)
+```
+
+```{r}
+# Prepare the dataset
+train_data= read.csv("healthcareTrain.csv")
+test_data = read.csv("healthcareTest.csv")
+dim(train_data)
+```
+```{r}
+# Predict the pdc-8-flag using the following features
+#total_los
+#num_op
+#num_er
+#num_ndc
+#pre_total_cost
+#pre_CCI
+library(class)
+train_data1 <- train_data[,c("total_los","num_op","num_er","num_ndc","pre_total_cost","pre_CCI")]
+test_data1 <- test_data[,c("total_los","num_op","num_er","num_ndc","pre_total_cost","pre_CCI")]
+
+# since label of training data and testing data located in 94th column in the dataframes
+# subset them to separated variables.
+train_labels <- train_data[,94]
+test_labels <- test_data[,94]
+```
+
+
+#### Data Normalization (Use the training parameters for normalization of test points)
+```{r}
+# Normarlize our continous data, using train_data1 as the parameter to normalize test_data1
+library(caret)
+normParam <- preProcess(train_data1, method = c("center","scale"))
+norm.trainData1 <- predict(normParam, train_data1)
+norm.testData1 <- predict(normParam, test_data1)
+```
+
+```{r}
+# Make train and test labels become dataframe
+train_labels <- as.data.frame(train_labels)
+test_labels <- as.data.frame(test_labels)
+```
+
+#### Use 10-fold cross validation to determine which value of K produces the most accurate result from the range k = 31 to 101 with a step size of 2.
+
+```{r}
+# Split the dataset into K equal partitions (or "folds")
+# So if k = 10 and dataset has 1378 observations
+# Each of the 10 folds would have approximate 137.8 observations(1 small or less)
+nrFolds <- 10
+
+# Create a temporary dataset with traindata and train label.
+# preparing for shuffle
+shuff <-  norm.trainData1
+shuff$labels <- train_data[,94]
+```
+
+```{r}
+# Set seed to 123, shuffling the data
+set.seed(123)
+shuff <- shuff[sample(nrow(shuff)),]
+
+# Now we subset train data and train label from the shuffled data
+norm.trainData_shuff <- shuff[,c("total_los","num_op","num_er","num_ndc","pre_total_cost","pre_CCI")]
+train_labels_shuff <- shuff[,c("labels")]
+train_labels_shuff <- as.data.frame(train_labels_shuff)
+```
+
+
+```{r}
+# generate array containing fold-number for each sample 
+#folds <- rep_len(1:nrFolds, nrow(norm.trainData_shuff))
+folds <- cut(seq(1,nrow(shuff)),breaks = 10, labels = FALSE)
+# Take a look at the first 500 of our folds
+head(folds, n = 500)
+```
+
+#### Cross Validation Process.
+
+```{r}
+# actual cross validation
+# Create a loop to repeat the process 10 times since we have 10 folds
+# Each iteration we will choose one fold as a test set and the rest folds is training set.
+# Alternatively, repeating the process until we use all the premaded fold for test set one by one for each loop.
+
+testing_accuracy <- c()
+for(m in 1:nrFolds) {
+    # actual split of the data
+    fold <- which(folds == m, arr.ind = TRUE)
+    data.train <- norm.trainData_shuff[-fold,]
+    train.labels1 <- train_labels_shuff[-fold,]
+    data.test <- norm.trainData_shuff[fold,]
+    test.labels1 <-train_labels_shuff[fold,]
+   # train and test your model with data.train and data.test
+   data_test_pred <- lapply(seq(31, 101, by=2) , function(i) knn(train = data.train, test = data.test, cl = train.labels1, k = i ))
+   # compare the prediction to test labels
+   confMatrix = lapply(1:36, function(x) mean((data_test_pred[[x]]) == test.labels1))
+   
+   # Get the accuracy rate for each k (from 31 to 101 step by 2) for each cross validation
+   # Store in big list below
+   # testing_accuracy will have 10 list, each list contains 36 accuracy rate results.
+   
+   testing_accuracy[[m]] <- confMatrix
+}
+```
+
+
+```{r}
+require(stats)
+# Create a matrix from our testing_accuracy list 
+# with row representing k, column representing 10 times cross validation result.
+k_accuracy_ave <- c()
+a <- matrix(unlist(testing_accuracy),nrow = 36)
+#a <- do.call(cbind,testing_accuracy)
+
+# apply mean function with margin = 1 (row)
+# calcuate the average of accuracy rates for each k in 10 cross validation. 
+
+k_accuracy_ave = apply(a,MARGIN = 1, FUN = mean)
+k_accuracy_ave
+```
+
+
+
+```{r}
+# Make a table with knames and its corresponding average accuracy rate
+#k_accuracy_ave
+knames = c(seq(31, 101, by=2))
+accuracytable <- cbind(knames,k_accuracy_ave)
+print("The mean accuracy rate for each k using 10-fold cross validation is  ")
+accuracytable
+```
+
+```{r}
+cat("Highest accuracy rate is",max(round(k_accuracy_ave,5)),"with k equals to ",33)
+```
+
+***According to the table of accuracy results above, it is clear that using 10-fold cross validation, the value of K that produces the most accurate result is k = 33 with accuracy rate of 0.6175341.***
+
+### 2. Plot the accuracy rate from your 10-fold cross validation vs. K.
+
+```{r}
+plot(k_accuracy_ave, x = (seq(31, 101, by=2)), type = "l", lty = 1, main="Accuracy Rate Plot from 10-fold cross validation vs K",
+  xlab="K values from 10-fold cross validation", ylab="Accuracy rates")
+lines(k_accuracy_ave,x = (seq(31, 101, by=2)),type = "l", lty = 1)
+```
+
+
+
+### 3. Use the best value of K to predict the pdc-80-flag for the test set. How does your validation error compare to test error?
+
+*Here, I will use the built-in knn function, fit it to our original normalized dataset using our defined best k value from #1 ( K = 85, accuracy rate = 0.606) to compare to the test error.*
+
+```{r}
+#Using built-in knn function on our original normalized training set and test 
+cl = train_labels[,1]
+predict_test = knn(train = norm.trainData1, test = norm.testData1, cl , k = 33)
+accuracy_test <- mean(as.data.frame(predict_test) == test_labels)
+cat("Using built-in function, we have the accuracy rate with k = 33 is: ", round(accuracy_test,3),"\n")
+error_test <- 1 - accuracy_test
+error_valiation <- 1 - max(k_accuracy_ave)
+cat("Validation error is ", (round(error_valiation,5))*100, "%\n")
+cat("Test error is ", (round(error_test,3))*100, "%")
+cat("\nCompare validation error to test error, the difference between validation and test error is ",round(abs(error_valiation - error_test),5)*100,"%")
+```
+
+***Using the best value of K = 33 to predict the pdc-80-flag for the test set, we got an accuracy rate of 61.3.  The test error is 38.7% while the validation error is 38.2%.  The difference is small and insignificant.The validation error is 0.416 % smaller than the test errors. This tells us that we did not under/over estimate the training/validation set and the error estimation.  By using the 10-fold cross validation method we can mostly estimate what the test error will be.***
+
+## Problem 2:
+
+### 1. Generate 10,000 hypotheses for each version. Report the average hypothesis g ̄(x) in each case.
+
+```{r}
+# Generate 10000 hypothesis for each version
+set.seed(123)
+numSet = 2*10000
+x = matrix(runif(numSet, min = -1, max = 1), nrow = 2)
+#Target Function
+f = sin(pi*x)
+```
+
+```{r}
+library(MASS)
+# unregularized model
+# find slope and intercept by using ginv() function b=ginv(x)*y
+gLine2 = sapply(1:(numSet/2), function(i) ginv(matrix(c(1,1,x[,i]), nrow=2))%*%f[,i])
+gLineBar2 = apply(gLine2, MARGIN = 1, FUN = mean)
+# Take mean, margin = 1 for rowmeans we have the gbar for unregularized linear model
+print("The average hypothesis g_bar(x) of the unregularized model is: ")
+gLineBar2
+```
+$y = x*0.7977892 - 0.01556352$
+
+```{r}
+library(matlib)
+# Turn lamda into identical matrix
+lamda <- matrix(c(0.1,0,0,0.1),nrow = 2)
+
+# weight-decay regulized model
+# apply regularization into the model with w = inv(t(X)*X + lamda)*t(X)*y
+
+gLine2_reg = sapply(1:(numSet/2), function(i) (inv(t(matrix(c(1,1,x[,i]), nrow=2))%*%matrix(c(1,1,x[,i]), nrow=2) + lamda)) %*% t(matrix(c(1,1,x[,i]), nrow=2))%*% f[,i])
+
+# Take mean, margin = 1 for rowmeans we have the gbar for regularized linear model
+gLineBar2_reg = apply(gLine2_reg, MARGIN = 1, FUN = mean)
+gLineBar2_reg
+print("The average hypothesis g_bar(x) of the regularized model is: ")
+```
+$y = x*0.636188789 - 0.005659488$
+
+### 2. Find and report bias2 for each model.
+```{r}
+# unregularized model
+xVec = seq(-1, +1, by = 10^-4) # Create a vector x to find f(x) and subsequently the bias at every x.
+fXvec = sin(pi*xVec)
+# Finding bias for linear model
+gLineBarXvec2 = xVec*(0.79778922) - 0.01556352
+biasLine2 = mean((gLineBarXvec2 - fXvec)^2)
+cat("Bias2 for unregularized linear model is", round(biasLine2,5))
+```
+
+```{r}
+# regularized model
+gLineBarXvec2_reg = lapply(1:20001, function(i) (xVec[i]*(0.631) - 0.005))
+gLineBarXvec2_reg = do.call(rbind,gLineBarXvec2_reg)
+biasLine2_reg = mean((gLineBarXvec2_reg - fXvec)^2)
+cat("Bias2 for regularized linear model is", round(biasLine2_reg,5))
+```
+
+### 3. Find and report variance for each model
+```{r}
+# unregularized model
+gLineXvec = matrix(c(rep(1,length(xVec)),xVec), ncol=2)%*%gLine2
+
+# Below is the avg. g evaluted at each x
+gLineBar_xVec = gLineBar2%*%matrix( c(rep(1,length(xVec)), xVec), byrow = TRUE,nrow=2)
+
+varXvec2 <- lapply(1:10000,function(i) (gLineXvec[,i] - gLineBar_xVec[1,])**2)
+varXvec2 <- do.call(cbind,varXvec2)
+varXvec2 <- rowSums(varXvec2)/(10000 - 1)  # horizontal
+finalvar <- mean(varXvec2)                 # vertical
+cat("Variance for unregularized linear model is", round(finalvar,5))
+```
+
+
+```{r}
+# regulize model
+gLineXvec_reg = matrix(c(rep(1,length(xVec)),xVec), ncol=2)%*%gLine2_reg
+
+# Below is the avg. g evaluted at each x
+gLineBar_xVec_reg =  gLineBar2_reg%*%matrix( c(rep(1,length(xVec)), xVec), byrow = TRUE,nrow=2)
+
+varXvec02 <- lapply(1:10000,function(i) (gLineXvec_reg[,i] - gLineBar_xVec_reg[1,])**2)
+varXvec02 <- do.call(cbind,varXvec02)
+varXvec02 <- rowSums(varXvec02)/(10000 - 1)  # horizontal
+finalvar2 <- mean(varXvec02)                 # vertical
+cat("Variance for unregularized linear model is", round(finalvar2,5))
+```
+
+
+### 4. For each case, plot g ̄(x) ± √var along with g ̄(x) and target function f(x) = sin(πx) . Which model will you choose? Why? Round your answers to 3 decimal places.
+
+#### a. Model y = x*0.7977892 - 0.01556352
+
+```{r}
+ggplot(data = data.frame(x = xVec, y = sin(pi*xVec)), aes(x,y)) +
+  geom_abline(data = data.frame(s = gLine2[1,1:100], i = gLine2[2,1:100]),
+            aes(slope = s, intercept = i),
+            alpha = 0.2) +
+  geom_line(color = "tomato", size = 1.2) +
+  geom_abline(slope = gLineBar2[2], 
+              intercept = gLineBar2[1], 
+              color = "navy",
+              size = 1.2) +
+  expand_limits(x = c(-.25, .25), y = c(-.25, .25)) 
+
+```
+
+#### b. Unregularized linear regression model, plot g ̄(x) ± √var along with g ̄(x) and target function f(x) 
+
+```{r}
+ggplot(data = data.frame(x = xVec, y = sin(pi*xVec)), aes(x,y)) +
+  geom_line(color = "tomato", size = 1.5) +
+  geom_abline(aes(slope = gLineBar2[2], intercept = gLineBar2[1]), 
+              color = "navy", size = 1.5) + 
+  geom_ribbon(aes(ymin = gLineBar_xVec[1,] - sqrt(varXvec2), ymax = gLineBar_xVec[1,] + sqrt(varXvec2)), 
+              alpha = 0.4) +
+  scale_x_continuous(expand = c(0,0))
+
+```
+
+#### c. Regularized linear regression model, plot g ̄(x) ± √var along with g ̄(x) and target function f(x) 
+
+```{r}
+ggplot(data = data.frame(x = xVec, y = sin(pi*xVec)), aes(x,y)) +
+  geom_line(color = "tomato", size = 1.5) +
+  geom_abline(aes(slope = gLineBar2_reg[2], intercept = gLineBar2_reg[1]), 
+              color = "navy", size = 1.5) + 
+  geom_ribbon(aes(ymin = gLineBar_xVec_reg[1,] - sqrt(varXvec02), ymax = gLineBar_xVec_reg[1,] + sqrt(varXvec02)), 
+              alpha = 0.4) +
+  scale_x_continuous(expand = c(0,0)) 
+```
+
+#### d. Which model will you choose? Why? Round your answers to 3 decimal places.
+```{r}
+# Let's calculate the error of unregularized and regularized model by the summation between variance with bias square
+error_unreg = finalvar + biasLine2
+error_reg = finalvar2 + biasLine2_reg
+cat("Error of unregularized linear regression model is ",round(error_unreg,3),"\n")
+cat("Error of regularized linear regression model is ",round(error_reg,3))
+```
+
+```{r}
+# Create a dataset to store the result.
+table <- as.data.frame (matrix(c(round(biasLine2,3),round(biasLine2_reg,3),round(finalvar,3),round(finalvar2,3),round(error_unreg,3),round(error_reg,3)),nrow =3,byrow = TRUE))
+colnames(table) = c("unregularized LM","regularized LM")
+rownames(table) = c("Bias square", "Variance","Error")
+table
+``` 
+
+***According to the results, we can see that the regularized linear regression model has a much smaller error than the unregularized linear regression model. Hence, the better model is the regularized model. Using the regularized model, bias squared was higher at 0.231, with the unregularized model at 0.205.  However, while the bias slighty increases, the variance of the regularized model decreases a lot from 1.65 to 0.327.  This means the model has a slighlty higher bias but less complexity. It also means that the estimators vary a lot at any datapoint when it is trained over different sets of the data. Therefore, we choose the regularized model in this case because it will reduce the overall error. This assignment gave us an understanding of the impact regularization has on training a model. By increasing bias a small amount, we can greatly reduce the variance, resulting in a smaller overall expected error to the model.***
