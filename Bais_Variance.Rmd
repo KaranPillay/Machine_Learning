@@ -1,0 +1,187 @@
+---
+title: "HW5 Machine Learning"
+author: "Karan Pillay, Nishi Sharma, Sara Paracha"
+date: "February 23, 2020"
+output: html_document
+---
+# Question-1
+### Generate 10,000 hypothesis in each space.
+
+```{r}
+set.seed(123)
+target <- function(x) {
+  sin(pi*x)
+}
+bv <- seq(-1,1,length.out=10000)
+plot(bv, target(bv), type="l", col="blue")
+abline(h=0, lty=4)
+```
+
+```{r}
+g0 <- function(x) {x-x}
+g1 <- function(x) {x}
+```
+
+```{r}
+plot(bv, target(bv), ylim=c(-2,2), type="l", col="blue", lty=4)
+abline(h=0, lty=4)
+
+g0_b <- 0 # parameter for the average hypothesis g0(x) = b
+
+runs <- 10000
+for (i in 1:runs) {
+  Dbv <- runif(2,-1,1)
+  data <- data.frame(x=Dbv, y=target(Dbv))
+  
+  abline(h=mean(data$x), col="lightgray")
+  
+  g0_b <- g0_b + mean(data$x)
+}
+points(bv, target(bv), type="l", col="blue", lty=4)
+     
+g0_b <- g0_b / runs
+abline(h=g0_b, col="red", lwd=2) # show average hypothesis
+```
+
+```{r}
+plot(bv, target(bv), ylim=c(-2,2), type="l", col="blue", lty=4)
+abline(h=0, lty=4)
+
+g1_a <- 0 # parameters for the average hypothesis g1(x) = ax+b
+g1_b <- 0
+
+runs <- 10000
+for (i in 1:runs) {
+  Dbv <- runif(2,-1,1)
+  data <- data.frame(x=Dbv, y=target(Dbv))  # create a new dataset
+  
+  slope <- (data$y[1]-data$y[2])/(data$x[1]-data$x[2])
+  intercept <- data$y[1] - slope * data$x[1]
+  abline(intercept, slope, col="lightgray")
+  
+  g1_a <- g1_a + slope
+  g1_b <- g1_b + intercept
+}
+points(bv, target(bv), type="l", col="blue", lty=4)
+
+g1_a <- g1_a / runs
+g1_b <- g1_b / runs
+
+abline(g1_b, g1_a, col="red", lwd=2) # show average hypothesis
+```
+
+```{r}
+g0_b
+```
+
+```{r}
+g1_a
+
+```
+
+```{r}
+g1_b
+
+```
+our models are:
+$$\bar{g_0}(x) = -0.006181286$$
+$$\bar{g_1}(x)=0.776367x-0.001324107$$
+
+# Question-2
+
+#### Find and report bias for each model.
+
+```{r}
+g0_avg <- function (x) {
+  g0_b * (x^0)
+}
+
+g1_avg <- function (x) {
+  g1_a * x + g1_b
+}
+```
+
+```{r}
+error <- function(gs, ys) {
+  sum((gs-ys)^2)/length(gs)
+}
+
+h0.e.out <- error(g0(bv), target(bv))
+h1.e.out <- error(g1(bv), target(bv))
+
+```
+
+
+```{r}
+xs <- seq(-1,1,length.out=10000)
+bias.h0 <- error(g0_avg(bv), target(bv))
+bias.h0
+```
+
+```{r}
+bias.h1 <- error(g1_avg(bv), target(bv))
+bias.h1
+```
+
+# Question-3
+
+#### Find and report variance for each model.
+
+```{r}
+bv       <- seq(-1,1,length.out=1000)
+datasets <- 100 # how many different datasets will be checked
+
+variance.h0 <- 0
+variance.h1 <- 0
+
+for(x in bv) {              # for each observation
+  
+  gs.h0 <- rep(NA,datasets) # (g^D(x)-g0_avg(x))^2, for a given dataset
+  gs.h1 <- rep(NA,datasets) # (g^D(x)-g1_avg(x))^2, for a given dataset
+
+  for(d in 1:datasets) {    # for each dataset
+    Dbv <- runif(2,-1,1)
+    data <- data.frame(x=Dbv, y=target(Dbv))  # create a new dataset 
+  
+    # process H0:
+    gs.h0[d] <- (mean(data$x) - g0_avg(x))^2
+    
+    # process H1:
+    a <- (data$y[1]-data$y[2])/(data$x[1]-data$x[2])
+    b <- data$y[1] - a * data$x[1]
+    gs.h1[d] <- ((a*x + b) - g1_avg(x))^2
+  } 
+  
+  variance.h0 <- variance.h0 + mean(gs.h0) # mean(gs.h0) == E_D(...)
+  variance.h1 <- variance.h1 + mean(gs.h1) # mean(gs.h0) == E_D(...)
+}
+
+variance.h0 <- variance.h0 / length(bv) # E_x(...)
+variance.h0
+```
+
+```{r}
+variance.h1 <- variance.h1 / length(bv) # E_x(...)
+variance.h1
+```
+
+#Qestion-4
+
+#### Plots 
+```{r}
+require(ggplot2)
+require(OOGL)
+plotFrame<-data.frame(bv,target(bv),(mean(gs.h0)-sqrt(variance.h0)),(mean(gs.h0)+sqrt(variance.h0)),mean(gs.h0))
+names(plotFrame)<-c("x","target","minusvar","plusvariance","gbar")
+```
+
+```{r}
+ggplot(plotFrame,aes(x))+
+  geom_line(aes(y=target, colour="target"))+
+  geom_line(aes(y=minusvar, colour="var"))+
+  geom_line(aes(y=plusvariance, colour="var"))+
+  geom_line(aes(y=gbar, colour="hypothesis"))
+```
+
+
+
