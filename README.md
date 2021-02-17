@@ -1,2 +1,2 @@
-# Data_Science
-Conatains all my data science projects.
+# Machine_Learning
+Conatains all my Machinr Learning projects.
