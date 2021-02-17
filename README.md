@@ -1,2 +1,2 @@
 # Machine_Learning
-Conatains all my Machinr Learning projects.
+Conatains all my Machine Learning projects.
